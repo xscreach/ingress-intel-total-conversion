@@ -1,0 +1,62 @@
+.tearMarker-summary {
+
+}
+
+.leaflet-tearMarker,
+.leaflet-tearMarker .leaflet-bar,
+.leaflet-tearMarker .leaflet-bar .tearMarkerActionBtn {
+    border-radius: 50% !important;
+}
+
+.leaflet-tearMarker .tearMarkerActionBtn {
+    background: url(../images/smurf-head.png) center center no-repeat;
+    background-size: 42px 42px;
+    width:42px !important;
+    height:42px !important;
+}
+
+.leaflet-tearMarker .tearMarkerActionBtn:hover,
+.leaflet-tearMarker .working {
+    box-shadow: inset 1px 1px 2px 0px #0f0, 1px 1px 4px 0px #000;
+    background-position: -1px -1px;
+}
+
+.leaflet-tearMarker .tearMarkerActionBtn:active {
+    box-shadow: inset 1px 1px 2px 0px #000, 1px 1px 4px 0px #0f0;
+    background-position: 1px 1px;
+}
+
+.leaflet-tearMarker .progress-bar {
+    width: 100%;
+    height: 10px;
+    position: absolute;
+    background-color: white;
+    top: 40px;
+}
+
+.leaflet-tearMarker .progress {
+    height: 100%;
+    background-color: red;
+}
+
+.leaflet-tearMarker .working {
+    animation: tearMarkerSearching 0.9s infinite linear;
+}
+
+@keyframes tearMarkerSearching {
+    0% {
+        transform: rotate(0deg) scale(1.2);
+    }
+    25% {
+        transform: rotate(90deg) scale(0.7);
+    }
+    50% {
+        transform: rotate(180deg) scale(1.1);
+    }
+    75% {
+        transform: rotate(270deg) scale(0.8);
+    }
+    100% {
+        transform: rotate(359deg)
+    }
+}
