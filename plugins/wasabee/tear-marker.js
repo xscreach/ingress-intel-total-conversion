@@ -10,14 +10,23 @@
 const PD_SLEEP_TIME = 250;
 const PD_PARALLELS = 5;
 const TEAR_MARKER_TYPE = 'DestroyPortalAlert';
-const MOD_TYPE = { RES_SHIELD: 'Shield', MULTIHACK: 'Multi-hack', FORCE_AMP: 'Force Amp', HEATSINK: 'Heat Sink', TURRET: 'Turret', LINK_AMPLIFIER: 'Link Amp' };
+
 const tearMarker = (window.plugin.tearMarker = {});
+
+tearMarker.MOD_TYPE = {
+  RES_SHIELD: 'Shield',
+  MULTIHACK: 'Multi-hack',
+  FORCE_AMP: 'Force Amp',
+  HEATSINK: 'Heat Sink',
+  TURRET: 'Turret',
+  LINK_AMPLIFIER: 'Link Amp',
+};
 
 tearMarker.checkMod = function (m) {
   return (
     m &&
-    ((m.rarity.match('.*RARE') && (m.name === MOD_TYPE.MULTIHACK || m.name === MOD_TYPE.HEATSINK)) ||
-      (m.rarity.match('.*VERY_RARE') && m.name.indexOf(MOD_TYPE.RES_SHIELD) >= 0))
+    ((m.rarity.match('.*RARE') && (m.name === tearMarker.MOD_TYPE.MULTIHACK || m.name === tearMarker.MOD_TYPE.HEATSINK)) ||
+      (m.rarity.match('.*VERY_RARE') && m.name.indexOf(tearMarker.MOD_TYPE.RES_SHIELD) >= 0))
   );
 };
 
@@ -67,7 +76,7 @@ tearMarker.resetFoundPortals = function () {
   tearMarker.errors = 0;
 };
 
-function checkLocation(portalNode) {
+tearMarker.checkLocation = function (portalNode) {
   return (
     window.map.getBounds().contains(portalNode._latlng) &&
     (!window.plugin.wasabee._selectedOp.zones ||
@@ -76,45 +85,45 @@ function checkLocation(portalNode) {
       !window.plugin.wasabee._selectedOp.zones[0].points.length > 0 ||
       window.plugin.wasabee._selectedOp.zones[0].contains(portalNode._latlng))
   );
-}
+};
 
 function doSearchTears() {
   console.log('Searching tears...');
   return new Promise((resolve) => {
     tearMarker.resetFoundPortals();
-    tearMarker.queue = Object.values(window.portals).filter(checkLocation);
+    tearMarker.queue = Object.values(window.portals).filter(tearMarker.checkLocation);
     tearMarker.initialQueueSize = tearMarker.queue.length;
     resolve();
   })
-    .then(() => Promise.all(Array(PD_PARALLELS).fill(0).map(startChecking)))
+    .then(() => Promise.all(Array(PD_PARALLELS).fill(0).map(tearMarker.startChecking)))
     .catch(() => console.log('Errors, yay'))
     .finally(tearMarker.finishResults);
 }
 
-function markProgress() {
+tearMarker.markProgress = function () {
   tearMarker.progress.style.width = ((tearMarker.initialQueueSize - tearMarker.queue.length) / tearMarker.initialQueueSize) * 100 + '%';
-}
+};
 
-function startChecking() {
+tearMarker.startChecking = function () {
   if (tearMarker.queue && tearMarker.queue.length > 0) {
-    return checkNext().finally(startChecking);
+    return tearMarker.checkNext().finally(tearMarker.startChecking);
   }
   return Promise.resolve();
-}
+};
 
-function checkNext() {
-  markProgress();
+tearMarker.checkNext = function () {
+  tearMarker.markProgress();
   const portalNode = tearMarker.queue.shift();
   if (portalNode) {
     const portalOptions = portalNode.options;
     if (window.plugin.wasabee._selectedOp.containsMarkerByID(portalOptions.guid, TEAR_MARKER_TYPE)) {
-      return getDetail(portalOptions.guid).then((detail) => {
+      return tearMarker.getDetail(portalOptions.guid).then((detail) => {
         if (!tearMarker.isTear(detail)) {
           tearMarker.removeMarker(portalOptions);
         }
       });
     } else if (portalOptions.data.team === window.TEAM_CODE_RES && portalOptions.data.level >= 6) {
-      return getDetail(portalOptions.guid).then((detail) => {
+      return tearMarker.getDetail(portalOptions.guid).then((detail) => {
         if (tearMarker.isTear(detail)) {
           tearMarker.addMarker(portalOptions.guid, detail);
         }
@@ -122,9 +131,9 @@ function checkNext() {
     }
   }
   return Promise.resolve();
-}
+};
 
-function getDetail(guid) {
+tearMarker.getDetail = function (guid) {
   if (window.portalDetail.isFresh(guid)) {
     return new Promise((resolve) => {
       resolve(window.portalDetail.get(guid));
@@ -144,13 +153,13 @@ function getDetail(guid) {
       )
     );
   }
-}
+};
 
-function done() {
+tearMarker.done = function () {
   tearMarker.running = false;
   tearMarker.searchButton.classList.remove('working');
   L.DomUtil.remove(tearMarker.progressBar);
-}
+};
 
 tearMarker.visualizeStart = function () {
   tearMarker.searchButton.classList.add('working');
@@ -171,18 +180,15 @@ tearMarker.searchTears = function () {
     }
   } finally {
     if (promise) {
-      promise.finally(done);
+      promise.finally(tearMarker.done);
     } else {
-      done();
+      tearMarker.done();
     }
   }
 };
 
 tearMarker.setupCss = function () {
-  $('<style>')
-    .prop('type', 'text/css')
-    .html('@include_css:tear-marker.css@')
-    .appendTo('head');
+  $('<style>').prop('type', 'text/css').html('@include_css:tear-marker.css@').appendTo('head');
 };
 
 tearMarker.controlIcon = function () {
