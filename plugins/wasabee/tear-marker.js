@@ -36,8 +36,8 @@ tearMarker.removeMarker = function (portalOptions) {
   const markers = window.plugin.wasabee._selectedOp.markers;
   const marker = markers.find((marker) => marker.portalId === portalOptions.guid);
   if (marker) {
-    tearMarker.removedMarkers++;
     window.plugin.wasabee._selectedOp.removeMarker(marker);
+    tearMarker.removedMarkers++;
   }
 };
 
@@ -52,9 +52,9 @@ tearMarker.addMarker = function (guid, pd) {
   };
 
   window.plugin.wasabee._selectedOp.convertPortalsToObjs([rawPortal]).forEach((p) => {
-    if (!window.plugin.wasabee._selectedOp.containsMarker(p, TEAR_MARKER_TYPE)) {
+    if (!window.plugin.wasabee._selectedOp.containsMarker(p, tearMarker.TEAR_MARKER_TYPE)) {
       window.plugin.wasabee._selectedOp.addPortal(p);
-      window.plugin.wasabee._selectedOp.addMarker(TEAR_MARKER_TYPE, p);
+      window.plugin.wasabee._selectedOp.addMarker(tearMarker.TEAR_MARKER_TYPE, p);
       tearMarker.addedMarkers++;
     }
   });
@@ -89,18 +89,25 @@ tearMarker.checkLocation = function (portalNode) {
   );
 };
 
-function doSearchTears() {
+tearMarker.checkBasicConditions = function (portalNode) {
+  return window.plugin.wasabee._selectedOp.containsMarkerByID(portalNode.options.guid, tearMarker.TEAR_MARKER_TYPE) ||
+    portalNode.options.team === window.TEAM_RES && portalNode.options.level >= 6;
+};
+
+tearMarker.doSearchTears = function () {
   console.log('Searching tears...');
   return new Promise((resolve) => {
     tearMarker.resetFoundPortals();
-    tearMarker.queue = Object.values(window.portals).filter(tearMarker.checkLocation);
+    tearMarker.queue = Object.values(window.portals)
+    .filter(tearMarker.checkLocation)
+    .filter(tearMarker.checkBasicConditions);
     tearMarker.initialQueueSize = tearMarker.queue.length;
     resolve();
   })
     .then(() => Promise.all(Array(tearMarker.PD_SIM_REQUESTS).fill(0).map(tearMarker.startChecking)))
     .catch(() => console.log('Errors, yay'))
     .finally(tearMarker.finishResults);
-}
+};
 
 tearMarker.markProgress = function () {
   tearMarker.progress.style.width = ((tearMarker.initialQueueSize - tearMarker.queue.length) / tearMarker.initialQueueSize) * 100 + '%';
@@ -118,19 +125,13 @@ tearMarker.checkNext = function () {
   const portalNode = tearMarker.queue.shift();
   if (portalNode) {
     const portalOptions = portalNode.options;
-    if (window.plugin.wasabee._selectedOp.containsMarkerByID(portalOptions.guid, TEAR_MARKER_TYPE)) {
-      return tearMarker.getDetail(portalOptions.guid).then((detail) => {
-        if (!tearMarker.isTear(detail)) {
-          tearMarker.removeMarker(portalOptions);
-        }
-      });
-    } else if (portalOptions.data.team === window.TEAM_CODE_RES && portalOptions.data.level >= 6) {
-      return tearMarker.getDetail(portalOptions.guid).then((detail) => {
-        if (tearMarker.isTear(detail)) {
-          tearMarker.addMarker(portalOptions.guid, detail);
-        }
-      });
-    }
+    return tearMarker.getDetail(portalOptions.guid).then((detail) => {
+      if (tearMarker.isTear(detail)) {
+        tearMarker.addMarker(portalOptions.guid, detail);
+      } else {
+        tearMarker.removeMarker(portalOptions);
+      }
+    });
   }
   return Promise.resolve();
 };
@@ -178,7 +179,7 @@ tearMarker.searchTears = function () {
   try {
     if (!tearMarker.running) {
       tearMarker.running = true;
-      promise = doSearchTears();
+      promise = tearMarker.doSearchTears();
     }
   } finally {
     if (promise) {
