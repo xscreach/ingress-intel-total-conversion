@@ -115,25 +115,27 @@ tearMarker.markProgress = function () {
 
 tearMarker.startChecking = function () {
   if (tearMarker.queue && tearMarker.queue.length > 0) {
+    tearMarker.markProgress();
     return tearMarker.checkNext().finally(tearMarker.startChecking);
   }
   return Promise.resolve();
 };
 
 tearMarker.checkNext = function () {
-  tearMarker.markProgress();
   const portalNode = tearMarker.queue.shift();
   if (portalNode) {
     const portalOptions = portalNode.options;
-    return tearMarker.getDetail(portalOptions.guid).then((detail) => {
-      if (tearMarker.isTear(detail)) {
-        tearMarker.addMarker(portalOptions.guid, detail);
-      } else {
-        tearMarker.removeMarker(portalOptions);
-      }
-    });
+    return tearMarker.getDetail(portalOptions.guid).then((detail) => tearMarker.handleDetail(portalOptions, detail));
   }
   return Promise.resolve();
+};
+
+tearMarker.handleDetail = function(portalOptions, detail) {
+  if(tearMarker.isTear(detail)) {
+    tearMarker.addMarker(portalOptions.guid, detail);
+  } else {
+    tearMarker.removeMarker(portalOptions);
+  }
 };
 
 tearMarker.getDetail = function (guid) {
