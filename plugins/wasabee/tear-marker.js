@@ -5,13 +5,15 @@
 // @description    Marks specific smurf portals with Wasabee "destroy" marker
 
 /* exported setup --eslint */
-/* global L --eslint */
-
-const PD_SLEEP_TIME = 250;
-const PD_PARALLELS = 5;
-const TEAR_MARKER_TYPE = 'DestroyPortalAlert';
+/* global L,$ --eslint */
 
 const tearMarker = (window.plugin.tearMarker = {});
+
+tearMarker.PD_DELAY = 250;
+tearMarker.PD_SIM_REQUESTS = 5;
+tearMarker.TEAR_MARKER_TYPE = 'DestroyPortalAlert';
+
+tearMarker.MARKER_TYPES = ['CapturePortalMarker', 'LetDecayPortalAlert', 'ExcludeMarker', 'DestroyPortalAlert', 'FarmPortalMarker', 'GotoPortalMarker', 'GetKeyPortalMarker', 'CreateLinkAlert', 'MeetAgentPortalMarker', 'OtherPortalAlert', 'RechargePortalAlert', 'UpgradePortalAlert', 'UseVirusPortalAlert'];
 
 tearMarker.MOD_TYPE = {
   RES_SHIELD: 'Shield',
@@ -95,7 +97,7 @@ function doSearchTears() {
     tearMarker.initialQueueSize = tearMarker.queue.length;
     resolve();
   })
-    .then(() => Promise.all(Array(PD_PARALLELS).fill(0).map(tearMarker.startChecking)))
+    .then(() => Promise.all(Array(tearMarker.PD_SIM_REQUESTS).fill(0).map(tearMarker.startChecking)))
     .catch(() => console.log('Errors, yay'))
     .finally(tearMarker.finishResults);
 }
@@ -149,7 +151,7 @@ tearMarker.getDetail = function (guid) {
               tearMarker.errors++;
               reject();
             }),
-        PD_SLEEP_TIME
+        tearMarker.PD_DELAY
       )
     );
   }
@@ -211,11 +213,72 @@ tearMarker.controlIcon = function () {
   window.map.addControl(new ActionButton());
 };
 
+tearMarker.markerTypeOptions = function() {
+  return tearMarker.MARKER_TYPES.map((type) => `<option ${tearMarker.TEAR_MARKER_TYPE === type?'selected="selected"':''}value="${type}">${window.plugin.wasabee.static.strings.English[type]}</option>`)
+    .join('');
+};
+
+tearMarker.configForm = function () {
+  return `
+      <label for="tearMarker-pd-delay">Delay between portal detail requests (ms)</label>
+      <input id="tearMarker-pd-delay" type="number" min="0" value="${tearMarker.PD_DELAY}">
+
+      <label for="tearMarker-pd-sim-requests">Max simultaneous portal detail requests</label>
+      <input id="tearMarker-pd-sim-requests" type="number" min="1" value="${tearMarker.PD_SIM_REQUESTS}">
+
+      <label for="tearMarker-tear-marker-type">Tear marker type</label>
+      <select id="tearMarker-tear-marker-type">
+        ${tearMarker.markerTypeOptions()}
+      </select>
+  `;
+};
+
+tearMarker.saveConfig = function () {
+  localStorage.setItem(
+    'tearMarker',
+    JSON.stringify({
+      pdd: (tearMarker.PD_DELAY = Number($('#tearMarker-pd-delay').val()) ?? tearMarker.PD_DELAY),
+      pdsr: (tearMarker.PD_SIM_REQUESTS = Number($('#tearMarker-pd-sim-requests').val()) ?? tearMarker.PD_SIM_REQUESTS),
+      tmt: (tearMarker.TEAR_MARKER_TYPE = Number($('#tearMarker-tear-marker-type').val()) ?? tearMarker.TEAR_MARKER_TYPE),
+    })
+  );
+};
+
+tearMarker.loadConfig = function () {
+  const localConfig = localStorage.getItem('tearMarker');
+  if (localConfig) {
+    const config = JSON.parse(localConfig);
+    if (config) {
+      tearMarker.PD_DELAY = config.pdd ?? tearMarker.PD_DELAY;
+      tearMarker.PD_SIM_REQUESTS = config.pdsr ?? tearMarker.PD_SIM_REQUESTS;
+      tearMarker.TEAR_MARKER_TYPE = config.tmt ?? tearMarker.TEAR_MARKER_TYPE;
+    }
+  }
+};
+
+tearMarker.configWindow = function () {
+  window.dialog({
+    title: 'Tear Marker Options',
+    id: 'tear-marker-options',
+    html: tearMarker.configForm(),
+    width: 'auto',
+    height: 'auto',
+    dialogClass: 'tear-marker-config',
+    closeCallback: tearMarker.saveConfig,
+  });
+};
+
+tearMarker.configButton = function () {
+  $('<a>').html('Tear Marker').attr('title', 'Tear Marker').click(tearMarker.configWindow).appendTo('#toolbox');
+};
+
 const setup = function () {
   // if (!window.plugin.wasabee) {
   //   alert(`Tear finder requires 'wasabee' plugin to be installed`);
   // } else {
+  tearMarker.loadConfig();
   tearMarker.setupCss();
   tearMarker.controlIcon();
+  tearMarker.configButton();
   // }
 };

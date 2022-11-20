@@ -1,5 +1,7 @@
-.tearMarker-summary {
-
+#dialog-tear-marker-options {
+    align-items: stretch;
+    display: flex;
+    flex-direction: column;
 }
 
 .leaflet-tearMarker,
