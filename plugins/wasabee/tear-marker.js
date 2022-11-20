@@ -192,6 +192,7 @@ tearMarker.searchTears = function () {
 
 tearMarker.setupCss = function () {
   $('<style>').prop('type', 'text/css').html('@include_css:tear-marker.css@').appendTo('head');
+  if(isSmartphone()) $('<style>').prop('type', 'text/css').html('@include_css:tear-marker-phone.css@').appendTo('head');
 };
 
 tearMarker.controlIcon = function () {
@@ -240,7 +241,7 @@ tearMarker.saveConfig = function () {
     JSON.stringify({
       pdd: (tearMarker.PD_DELAY = Number($('#tearMarker-pd-delay').val()) ?? tearMarker.PD_DELAY),
       pdsr: (tearMarker.PD_SIM_REQUESTS = Number($('#tearMarker-pd-sim-requests').val()) ?? tearMarker.PD_SIM_REQUESTS),
-      tmt: (tearMarker.TEAR_MARKER_TYPE = Number($('#tearMarker-tear-marker-type').val()) ?? tearMarker.TEAR_MARKER_TYPE),
+      tmt: (tearMarker.TEAR_MARKER_TYPE = $('#tearMarker-tear-marker-type').val() ?? tearMarker.TEAR_MARKER_TYPE),
     })
   );
 };
