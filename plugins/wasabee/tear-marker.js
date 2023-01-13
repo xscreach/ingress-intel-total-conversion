@@ -9,12 +9,7 @@
 
 const tearMarker = (window.plugin.tearMarker = {});
 
-tearMarker.PD_DELAY = 250;
-tearMarker.PD_SIM_REQUESTS = 5;
-tearMarker.TEAR_MARKER_TYPE = 'DestroyPortalAlert';
-
 tearMarker.MARKER_TYPES = ['CapturePortalMarker', 'LetDecayPortalAlert', 'ExcludeMarker', 'DestroyPortalAlert', 'FarmPortalMarker', 'GotoPortalMarker', 'GetKeyPortalMarker', 'CreateLinkAlert', 'MeetAgentPortalMarker', 'OtherPortalAlert', 'RechargePortalAlert', 'UpgradePortalAlert', 'UseVirusPortalAlert'];
-
 tearMarker.MOD_TYPE = {
   RES_SHIELD: 'Shield',
   MULTIHACK: 'Multi-hack',
@@ -22,6 +17,12 @@ tearMarker.MOD_TYPE = {
   HEATSINK: 'Heat Sink',
   TURRET: 'Turret',
   LINK_AMPLIFIER: 'Link Amp',
+};
+
+tearMarker.config = {
+  portalDetailRequestDelay: 200,
+  portalDetailSimultaneousRequests: 1,
+  tearMarkerType: 'DestroyPortalAlert',
 };
 
 tearMarker.checkMod = function (m) {
@@ -33,7 +34,7 @@ tearMarker.checkMod = function (m) {
 };
 
 tearMarker.isTear = function (pd) {
-  return pd.team === 'R' && (pd.level >= 7 || (pd.level >= 6 && pd.mods.filter(tearMarker.checkMod).length > 0));
+  return pd.team === window.TEAM_CODE_RES && (pd.level >= 7 || (pd.level >= 6 && pd.mods.filter(tearMarker.checkMod).length > 0));
 };
 
 tearMarker.removeMarker = function (portalOptions) {
@@ -56,26 +57,27 @@ tearMarker.addMarker = function (guid, pd) {
   };
 
   window.plugin.wasabee._selectedOp.convertPortalsToObjs([rawPortal]).forEach((p) => {
-    if (!window.plugin.wasabee._selectedOp.containsMarker(p, tearMarker.TEAR_MARKER_TYPE)) {
+    if (!window.plugin.wasabee._selectedOp.containsMarker(p, tearMarker.config.tearMarkerType)) {
       window.plugin.wasabee._selectedOp.addPortal(p);
-      window.plugin.wasabee._selectedOp.addMarker(tearMarker.TEAR_MARKER_TYPE, p);
+      window.plugin.wasabee._selectedOp.addMarker(tearMarker.config.tearMarkerType, p);
       tearMarker.addedMarkers++;
     }
   });
 };
 
-tearMarker.finishResults = function () {
+tearMarker.showResults = function () {
   alert(
     `Tears Finder<ul class="tearMarker-summary"><li>${tearMarker.initialQueueSize} checked portals</li><li>${tearMarker.errors} errors</li><li>${tearMarker.addedMarkers} new tears</li><li>${tearMarker.removedMarkers} destroyed tears</li><li>${window.plugin.wasabee._selectedOp.markers.length} total tears</li></ul>`
   );
   console.log(`Done. Found ${tearMarker.addedMarkers} tear(s)`);
 };
 
-tearMarker.resetFoundPortals = function () {
+tearMarker.resetInternals = function () {
   tearMarker.portals = [];
   tearMarker.addedMarkers = 0;
   tearMarker.removedMarkers = 0;
   tearMarker.errors = 0;
+  tearMarker.lastRequest = 0;
 };
 
 tearMarker.checkLocation = function (portalNode) {
@@ -90,23 +92,29 @@ tearMarker.checkLocation = function (portalNode) {
 };
 
 tearMarker.checkBasicConditions = function (portalNode) {
-  return window.plugin.wasabee._selectedOp.containsMarkerByID(portalNode.options.guid, tearMarker.TEAR_MARKER_TYPE) ||
+  return window.plugin.wasabee._selectedOp.containsMarkerByID(portalNode.options.guid, tearMarker.config.tearMarkerType) ||
     portalNode.options.team === window.TEAM_RES && portalNode.options.level >= 6;
 };
 
-tearMarker.doSearchTears = function () {
-  console.log('Searching tears...');
+tearMarker.prepareQueue = function () {
   return new Promise((resolve) => {
-    tearMarker.resetFoundPortals();
+    tearMarker.resetInternals();
     tearMarker.queue = Object.values(window.portals)
     .filter(tearMarker.checkLocation)
     .filter(tearMarker.checkBasicConditions);
     tearMarker.initialQueueSize = tearMarker.queue.length;
     resolve();
-  })
-    .then(() => Promise.all(Array(tearMarker.PD_SIM_REQUESTS).fill(0).map(tearMarker.startChecking)))
-    .catch(() => console.log('Errors, yay'))
-    .finally(tearMarker.finishResults);
+  });
+};
+
+tearMarker.startThreads = function () {
+  return Promise.all(Array(tearMarker.config.portalDetailSimultaneousRequests).fill().map(tearMarker.startChecking));
+};
+
+tearMarker.doSearchTears = function () {
+  console.log('Searching tears...');
+  return tearMarker.prepareQueue()
+    .then(tearMarker.startThreads)
 };
 
 tearMarker.markProgress = function () {
@@ -145,25 +153,34 @@ tearMarker.getDetail = function (guid) {
       resolve(window.portalDetail.get(guid));
     });
   } else {
+    let timeout = 0;
+    const timeDiff = new Date().getTime() - tearMarker.lastRequest;
+    if (tearMarker.lastRequest && timeDiff < tearMarker.config.portalDetailRequestDelay) {
+      timeout = tearMarker.config.portalDetailRequestDelay - timeDiff;
+    }
+
     return new Promise((resolve, reject) =>
       setTimeout(
-        () =>
+        () => {
+          tearMarker.lastRequest = new Date().getTime();
           window.portalDetail
             .request(guid)
-            .then((pd) => resolve(pd))
+            .then(resolve)
             .catch(() => {
               tearMarker.errors++;
               reject();
-            }),
-        tearMarker.PD_DELAY
+            })
+        },
+        timeout
       )
     );
   }
 };
 
-tearMarker.done = function () {
+tearMarker.finish = function () {
   tearMarker.running = false;
   tearMarker.searchButton.classList.remove('working');
+  tearMarker.showResults();
   L.DomUtil.remove(tearMarker.progressBar);
 };
 
@@ -186,9 +203,11 @@ tearMarker.searchTears = function () {
     }
   } finally {
     if (promise) {
-      promise.finally(tearMarker.done);
+      promise
+        .catch(() => console.log('Errors, yay: ' + JSON.stringify(arguments)))
+        .finally(tearMarker.finish);
     } else {
-      tearMarker.done();
+      tearMarker.finish();
     }
   }
 };
@@ -219,17 +238,17 @@ tearMarker.controlIcon = function () {
 };
 
 tearMarker.markerTypeOptions = function() {
-  return tearMarker.MARKER_TYPES.map((type) => `<option ${tearMarker.TEAR_MARKER_TYPE === type?'selected="selected"':''}value="${type}">${window.plugin.wasabee.static.strings.English[type]}</option>`)
+  return tearMarker.MARKER_TYPES.map((type) => `<option ${tearMarker.config.tearMarkerType === type?'selected="selected"':''}value="${type}">${window.plugin.wasabee.static.strings.English[type]}</option>`)
     .join('');
 };
 
 tearMarker.configForm = function () {
   return `
       <label for="tearMarker-pd-delay">Delay between portal detail requests (ms)</label>
-      <input id="tearMarker-pd-delay" type="number" min="0" value="${tearMarker.PD_DELAY}">
+      <input id="tearMarker-pd-delay" type="number" min="0" value="${tearMarker.config.portalDetailRequestDelay}">
 
       <label for="tearMarker-pd-sim-requests">Max simultaneous portal detail requests</label>
-      <input id="tearMarker-pd-sim-requests" type="number" min="1" value="${tearMarker.PD_SIM_REQUESTS}">
+      <input id="tearMarker-pd-sim-requests" type="number" min="1" value="${tearMarker.config.portalDetailSimultaneousRequests}">
 
       <label for="tearMarker-tear-marker-type">Tear marker type</label>
       <select id="tearMarker-tear-marker-type">
@@ -239,24 +258,23 @@ tearMarker.configForm = function () {
 };
 
 tearMarker.saveConfig = function () {
-  localStorage.setItem(
-    'tearMarker',
-    JSON.stringify({
-      pdd: (tearMarker.PD_DELAY = Number($('#tearMarker-pd-delay').val()) ?? tearMarker.PD_DELAY),
-      pdsr: (tearMarker.PD_SIM_REQUESTS = Number($('#tearMarker-pd-sim-requests').val()) ?? tearMarker.PD_SIM_REQUESTS),
-      tmt: (tearMarker.TEAR_MARKER_TYPE = $('#tearMarker-tear-marker-type').val() ?? tearMarker.TEAR_MARKER_TYPE),
-    })
-  );
+  tearMarker.config.portalDetailRequestDelay = Number($('#tearMarker-pd-delay').val()) ?? tearMarker.config.portalDetailRequestDelay;
+  tearMarker.config.portalDetailSimultaneousRequests = Number($('#tearMarker-pd-sim-requests').val()) ?? tearMarker.config.portalDetailSimultaneousRequests;
+  tearMarker.config.tearMarkerType = $('#tearMarker-tear-marker-type').val() ?? tearMarker.config.tearMarkerType;
+
+  localStorage.setItem('tearMarker', JSON.stringify(tearMarker.config));
 };
 
 tearMarker.loadConfig = function () {
   const localConfig = localStorage.getItem('tearMarker');
   if (localConfig) {
-    const config = JSON.parse(localConfig);
-    if (config) {
-      tearMarker.PD_DELAY = config.pdd ?? tearMarker.PD_DELAY;
-      tearMarker.PD_SIM_REQUESTS = config.pdsr ?? tearMarker.PD_SIM_REQUESTS;
-      tearMarker.TEAR_MARKER_TYPE = config.tmt ?? tearMarker.TEAR_MARKER_TYPE;
+    try {
+      const config = JSON.parse(localConfig);
+      if (config) {
+        Object.assign(tearMarker.config, config);
+      }
+    } catch(e) {
+      console.error("Error loading tearMarker config: " + e);
     }
   }
 };
